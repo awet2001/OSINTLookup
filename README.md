@@ -12,7 +12,9 @@ It does **not** access private accounts, messages, device contents, passwords, o
 - country / calling-code detection
 - possible / valid numbering-pattern checks
 - line-type detection when metadata supports it
-- parallel querying of multiple configured licensed providers
+- native Twilio Lookup v2 integration for phone intelligence
+- native People Data Labs Person Identify integration for self/consented identity enrichment
+- parallel querying of multiple configured custom licensed providers
 - structured observations for person, organization, email, address, profile, domain, phone, and other records
 - provenance retained per observation
 - conservative entity deduplication by normalized identifiers
@@ -32,28 +34,28 @@ It does **not** access private accounts, messages, device contents, passwords, o
 phone number
     |
     +--> local phone metadata
-    |
-    +--> licensed provider A ----+
-    +--> licensed provider B ----+--> observations + relationship evidence
-    +--> licensed provider N ----+                 |
-                                                   v
-                                             normalization
-                                                   |
-                                                   v
-                                            entity resolver
-                                                   |
-                       +---------------------------+--------------------------+
-                       |                           |                          |
-                    entities                  relationships               provenance
-                 name / email /              associated-with /           source URLs /
-                 address / profile           belongs-to / etc.           confidence
+    +--> Twilio Lookup v2 --------+
+    +--> People Data Labs --------+
+    +--> licensed provider A -----+--> observations + relationship evidence
+    +--> licensed provider B -----+                 |
+                                                     v
+                                               normalization
+                                                     |
+                                                     v
+                                              entity resolver
+                                                     |
+                         +---------------------------+--------------------------+
+                         |                           |                          |
+                      entities                  relationships               provenance
+                   name / email /              associated-with /           source URLs /
+                   address / profile           belongs-to / etc.           confidence
 ```
 
 The resolver deliberately does not fuzzy-merge two people merely because their names are similar. A false merge can create a convincing but incorrect profile, so ambiguous records remain separate unless the evidence supplies a stronger shared identifier or relationship.
 
 ## Important limitation
 
-The application code is only one half of a ClarityCheck-like product. The other half is **data access**. Real name/email/address/profile enrichment requires public datasets you may lawfully process or commercial providers whose contracts permit the use case. OSINTLookup does not ship with a hidden people database.
+The application code is only one half of a ClarityCheck-like product. The other half is **data access**. Real name/email/location/profile enrichment depends on commercial data coverage and field access under your provider plan. OSINTLookup does not ship with a hidden people database.
 
 A valid phone-number pattern does **not** prove that the number is active, assigned, or owned by a particular person. Provider data may be incomplete or stale. Treat confidence as evidence strength, not proof, and verify important claims against cited sources.
 
@@ -76,7 +78,60 @@ npm start
 
 The server automatically loads `.env` when that file exists. Copy `.env.example` to `.env` for local configuration. Never commit real API tokens.
 
-## Multiple licensed providers
+## Native provider: Twilio Lookup v2
+
+Twilio is disabled by default. Enabling it requires credentials **and** an explicit flag so credentials alone do not trigger billable requests.
+
+```env
+TWILIO_LOOKUP_ENABLED=true
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=replace-with-secret
+TWILIO_LOOKUP_FIELDS=line_type_intelligence
+```
+
+Supported fields in this adapter:
+
+```text
+line_type_intelligence
+caller_name
+line_status
+```
+
+The default is `line_type_intelligence`. Caller Name is only useful for supported US numbers and may be billed per request, so enable it intentionally:
+
+```env
+TWILIO_LOOKUP_FIELDS=line_type_intelligence,caller_name
+```
+
+Returned carrier, line type, caller-name, caller-type, and line-status values are converted into normal graph observations and linked back to the queried phone number. Caller Name remains an association, not proof of current ownership.
+
+## Native provider: People Data Labs Person Identify
+
+PDL is also disabled by default:
+
+```env
+PDL_IDENTIFY_ENABLED=true
+PDL_API_KEY=replace-with-secret
+PDL_MIN_MATCH_SCORE=70
+```
+
+The adapter sends the E.164 phone number to Person Identify, keeps at most the top five returned matches, and discards profiles below `PDL_MIN_MATCH_SCORE`.
+
+It requests a deliberately limited field set:
+
+- full name
+- email addresses
+- associated phone numbers
+- general location names
+- social/profile URLs
+- current company
+- current job title
+
+It intentionally does **not** request birth dates or street-address fields. PDL is skipped for `business` lookup scope and only runs for `self` or `consented` scope.
+
+Each surviving profile becomes a person entity. Emails, phone numbers, locations, social profiles, company, and job title become related entities with the PDL match score carried into the evidence graph.
+
+## Multiple custom licensed providers
 
 Preferred configuration uses `LICENSED_PROVIDERS_JSON`:
 
@@ -152,8 +207,8 @@ other
 
 Adapter limits:
 
-- up to 50 structured observations per provider
-- up to 100 relationships per provider
+- up to 50 structured observations per custom provider
+- up to 100 relationships per custom provider
 - confidence values clamped to `0..1`
 - text fields length-limited
 - seven-second provider timeout
@@ -218,19 +273,22 @@ The response includes:
 - Reverse proxies, hosting platforms, CDNs, and configured providers may maintain their own logs; review those separately.
 - Configure `TRUST_PROXY` correctly before relying on IP-based rate limiting behind a reverse proxy.
 - Keep provider credentials in environment variables or a secret manager.
+- Twilio and PDL integrations require explicit enable flags so credentials alone do not activate them.
 - Before exposing enrichment publicly, add authentication, abuse controls, audit rules, deletion/objection workflows, retention policy, and jurisdiction-specific privacy review.
 - Do not configure providers whose terms prohibit reverse lookup, aggregation, or the intended subject scope.
 
 ## Project structure
 
 ```text
-src/phone.ts       phone parsing + research-link generation
-src/model.ts       provenance graph data model
-src/provider.ts    multi-provider enrichment boundary
-src/resolver.ts    conservative entity resolution
-src/server.ts      Express API + static server
-public/            browser UI
-test/              unit tests
+src/phone.ts                 phone parsing + research-link generation
+src/model.ts                 provenance graph data model
+src/provider.ts              custom multi-provider enrichment boundary
+src/resolver.ts              conservative entity resolution
+src/integrations/twilio.ts   Twilio Lookup v2 adapter
+src/integrations/pdl.ts      People Data Labs Person Identify adapter
+src/server.ts                Express API + static server
+public/                      browser UI
+test/                        unit tests
 ```
 
 ## Development checks
