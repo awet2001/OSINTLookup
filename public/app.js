@@ -178,23 +178,69 @@ function renderProviderDetails(providers) {
   }
 }
 
+const categoryLabels = {
+  broad: 'Exact matches',
+  documents: 'Documents and data files',
+  profiles: 'Public profiles',
+  business: 'Business/contact pages',
+  messaging: 'Messaging/contact mentions',
+  pivot: 'Evidence pivots',
+};
+
 function renderResearchLinks(links) {
   const root = document.querySelector('#research-links');
   root.replaceChildren();
 
-  for (const item of links) {
-    const anchor = document.createElement('a');
-    anchor.className = 'research-link';
-    anchor.href = item.url;
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
+  if (!links.length) {
+    emptyState(root, 'No research queries were generated.');
+    return;
+  }
 
-    const title = document.createElement('strong');
-    title.textContent = item.label;
-    const note = document.createElement('span');
-    note.textContent = item.note;
-    anchor.append(title, note);
-    root.append(anchor);
+  const groups = new Map();
+  for (const item of links) {
+    const category = item.category || 'broad';
+    const existing = groups.get(category) || [];
+    existing.push(item);
+    groups.set(category, existing);
+  }
+
+  for (const [category, items] of groups) {
+    const group = document.createElement('section');
+    group.className = 'research-group';
+
+    const heading = document.createElement('h3');
+    heading.textContent = categoryLabels[category] || category;
+    group.append(heading);
+
+    const list = document.createElement('div');
+    list.className = 'research-group-links';
+
+    for (const item of items) {
+      const anchor = document.createElement('a');
+      anchor.className = 'research-link';
+      anchor.href = item.url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+
+      const title = document.createElement('strong');
+      title.textContent = item.label;
+      anchor.append(title);
+
+      if (item.query) {
+        const query = document.createElement('code');
+        query.className = 'research-query';
+        query.textContent = item.query;
+        anchor.append(query);
+      }
+
+      const note = document.createElement('span');
+      note.textContent = item.note;
+      anchor.append(note);
+      list.append(anchor);
+    }
+
+    group.append(list);
+    root.append(group);
   }
 }
 
@@ -202,7 +248,7 @@ async function loadStatus() {
   try {
     const response = await fetch('/api/status', { cache: 'no-store' });
     const status = await response.json();
-    providerStatus.textContent = status.providerConfigured ? 'Enrichment providers configured' : 'Metadata-only mode';
+    providerStatus.textContent = status.providerConfigured ? 'Enrichment providers configured' : 'Metadata + public research mode';
     providerStatus.classList.toggle('live', Boolean(status.providerConfigured));
   } catch {
     providerStatus.textContent = 'Status unavailable';
