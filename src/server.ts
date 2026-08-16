@@ -8,6 +8,8 @@ import { buildResearchLinks, inspectPhone, LookupInputError } from './phone';
 import { normalizeObservedValue, type Observation } from './model';
 import { queryLicensedProviders, type Finding } from './provider';
 import { resolveObservations } from './resolver';
+import { queryPeopleDataLabs } from './integrations/pdl';
+import { queryTwilioLookup } from './integrations/twilio';
 
 try { loadEnvFile(); } catch { /* .env is optional */ }
 
@@ -51,7 +53,13 @@ app.get('/api/status', (_req, res) => {
   res.json({
     ok: true,
     providerConfigured: Boolean(
-      process.env.LICENSED_PROVIDERS_JSON?.trim() || process.env.LICENSED_PROVIDER_URL?.trim(),
+      process.env.LICENSED_PROVIDERS_JSON?.trim()
+      || process.env.LICENSED_PROVIDER_URL?.trim()
+      || (process.env.TWILIO_LOOKUP_ENABLED?.trim().toLowerCase() === 'true'
+        && process.env.TWILIO_ACCOUNT_SID?.trim()
+        && process.env.TWILIO_AUTH_TOKEN?.trim())
+      || (process.env.PDL_IDENTIFY_ENABLED?.trim().toLowerCase() === 'true'
+        && process.env.PDL_API_KEY?.trim()),
     ),
     retention: 'Lookup requests are processed in memory and are not stored by this application.',
     allowedScopes: ['self', 'consented', 'business'],
@@ -86,6 +94,7 @@ app.post('/api/lookup', lookupLimiter, async (req, res) => {
 
   try {
     const phone = inspectPhone(body.phone, body.defaultCountry);
+    const lookupScope = String(body.lookupScope) as 'self' | 'consented' | 'business';
     const localFindings: Finding[] = [
       {
         id: 'phone-country',
@@ -125,23 +134,48 @@ app.post('/api/lookup', lookupLimiter, async (req, res) => {
       note: 'Lookup anchor only; this does not establish ownership.',
     };
 
-    const providers = await queryLicensedProviders(phone.e164);
+    const pdlPromise = lookupScope === 'business'
+      ? Promise.resolve(null)
+      : queryPeopleDataLabs(phone.e164);
+
+    const [genericProviders, twilio, pdl] = await Promise.all([
+      queryLicensedProviders(phone.e164),
+      queryTwilioLookup(phone.e164),
+      pdlPromise,
+    ]);
+
+    const nativeResults = [twilio, pdl].filter((result) => result !== null);
     const graph = resolveObservations(
-      [queryPhoneObservation, ...providers.observations],
-      providers.relationships,
+      [
+        queryPhoneObservation,
+        ...genericProviders.observations,
+        ...nativeResults.flatMap((result) => result.observations),
+      ],
+      [
+        ...genericProviders.relationships,
+        ...nativeResults.flatMap((result) => result.relationships),
+      ],
     );
+
+    const nativeStatuses = nativeResults
+      .filter((result) => result.configured)
+      .map((result) => ({
+        name: result.name,
+        ok: result.ok,
+        ...(result.error ? { error: result.error } : {}),
+      }));
 
     res.json({
       generatedAt: new Date().toISOString(),
       retention: 'not-stored',
-      lookupScope: body.lookupScope,
+      lookupScope,
       phone,
-      findings: [...localFindings, ...providers.findings],
+      findings: [...localFindings, ...genericProviders.findings],
       graph,
       researchLinks: buildResearchLinks(phone),
       providers: {
-        configured: providers.configured,
-        statuses: providers.providerStatuses,
+        configured: genericProviders.configured || nativeStatuses.length > 0,
+        statuses: [...genericProviders.providerStatuses, ...nativeStatuses],
       },
     });
   } catch (error) {
