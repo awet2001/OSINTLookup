@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Privacy-conscious phone-number intelligence and public-source lookup tool.">
+  <title>OSINTLookup</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="eyebrow">PUBLIC + LICENSED SOURCES</div>
+      <h1>OSINTLookup</h1>
+      <p class="lede">Inspect phone-number metadata and combine it with explicitly configured, licensed enrichment sources. Searches are processed in memory and are not saved by this app.</p>
+    </header>
+
+    <section class="panel search-panel" aria-labelledby="lookup-title">
+      <div class="panel-heading">
+        <div>
+          <h2 id="lookup-title">Phone lookup</h2>
+          <p>Use international format when possible, for example <code>+1 213 373 4253</code>.</p>
+        </div>
+        <span id="provider-status" class="status-pill">Checking provider…</span>
+      </div>
+
+      <form id="lookup-form">
+        <div class="form-grid">
+          <label>
+            <span>Phone number</span>
+            <input id="phone" name="phone" type="tel" autocomplete="off" placeholder="+31 6 12345678" required maxlength="64">
+          </label>
+          <label>
+            <span>Default country</span>
+            <input id="country" name="country" type="text" value="NL" maxlength="2" pattern="[A-Za-z]{2}" aria-describedby="country-help">
+            <small id="country-help">Two-letter ISO code; only used when the number has no + country code.</small>
+          </label>
+        </div>
+
+        <label class="consent-row">
+          <input id="purpose" type="checkbox" required>
+          <span>I will use this for a lawful purpose and only with public or properly licensed data sources.</span>
+        </label>
+
+        <button id="submit" type="submit">Run lookup</button>
+        <p id="error" class="error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section id="results" class="results" hidden aria-live="polite">
+      <div class="summary-grid">
+        <article class="panel summary-card">
+          <span class="card-label">Normalized</span>
+          <strong id="normalized">—</strong>
+          <span id="formatted">—</span>
+        </article>
+        <article class="panel summary-card">
+          <span class="card-label">Country / calling code</span>
+          <strong id="country-result">—</strong>
+          <span id="calling-code">—</span>
+        </article>
+        <article class="panel summary-card">
+          <span class="card-label">Pattern status</span>
+          <strong id="validity">—</strong>
+          <span id="line-type">—</span>
+        </article>
+      </div>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Findings</h2>
+            <p>Every result includes its source and an explicit confidence score.</p>
+          </div>
+        </div>
+        <div id="findings" class="finding-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Public-web research</h2>
+        <p>These links are generated locally. No search engine receives the phone number unless you choose to open a link.</p>
+        <div id="research-links" class="link-list"></div>
+      </section>
+
+      <section class="panel notice">
+        <h2>What this does not mean</h2>
+        <p>A valid numbering pattern does not prove the number is active, assigned, or owned by a particular person. Provider data may also be incomplete or stale; verify important claims against the cited source.</p>
+      </section>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
