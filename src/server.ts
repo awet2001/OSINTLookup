@@ -5,7 +5,9 @@ import { loadEnvFile } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { buildResearchLinks, inspectPhone, LookupInputError } from './phone';
-import { queryLicensedProvider, type Finding } from './provider';
+import { normalizeObservedValue, type Observation } from './model';
+import { queryLicensedProviders, type Finding } from './provider';
+import { resolveObservations } from './resolver';
 
 try { loadEnvFile(); } catch { /* .env is optional */ }
 
@@ -33,7 +35,7 @@ app.use(helmet({
     },
   },
 }));
-app.use(express.json({ limit: '8kb' }));
+app.use(express.json({ limit: '16kb' }));
 app.use(express.static(publicDir, { extensions: ['html'] }));
 
 const lookupLimiter = rateLimit({
@@ -48,17 +50,29 @@ app.get('/api/status', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({
     ok: true,
-    providerConfigured: Boolean(process.env.LICENSED_PROVIDER_URL?.trim()),
+    providerConfigured: Boolean(
+      process.env.LICENSED_PROVIDERS_JSON?.trim() || process.env.LICENSED_PROVIDER_URL?.trim(),
+    ),
     retention: 'Lookup requests are processed in memory and are not stored by this application.',
+    allowedScopes: ['self', 'consented', 'business'],
   });
 });
 
 app.post('/api/lookup', lookupLimiter, async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  const body = req.body as { phone?: unknown; defaultCountry?: unknown; purposeAccepted?: unknown };
+  const body = req.body as {
+    phone?: unknown;
+    defaultCountry?: unknown;
+    purposeAccepted?: unknown;
+    lookupScope?: unknown;
+  };
 
   if (body.purposeAccepted !== true) {
     res.status(400).json({ error: 'Confirm lawful-use and public/licensed-source use before searching.' });
+    return;
+  }
+  if (!['self', 'consented', 'business'].includes(String(body.lookupScope))) {
+    res.status(400).json({ error: 'lookupScope must be self, consented, or business.' });
     return;
   }
   if (typeof body.phone !== 'string') {
@@ -100,18 +114,34 @@ app.post('/api/lookup', lookupLimiter, async (req, res) => {
       }] : []),
     ];
 
-    const provider = await queryLicensedProvider(phone.e164);
+    const queryPhoneObservation: Observation = {
+      id: 'query-phone',
+      entityKind: 'phone',
+      field: 'phone',
+      value: phone.e164,
+      normalizedValue: normalizeObservedValue('phone', phone.e164),
+      confidence: 1,
+      source: { name: 'User query', kind: 'local-metadata' },
+      note: 'Lookup anchor only; this does not establish ownership.',
+    };
+
+    const providers = await queryLicensedProviders(phone.e164);
+    const graph = resolveObservations(
+      [queryPhoneObservation, ...providers.observations],
+      providers.relationships,
+    );
 
     res.json({
       generatedAt: new Date().toISOString(),
       retention: 'not-stored',
+      lookupScope: body.lookupScope,
       phone,
-      findings: [...localFindings, ...provider.findings],
+      findings: [...localFindings, ...providers.findings],
+      graph,
       researchLinks: buildResearchLinks(phone),
-      provider: {
-        configured: provider.configured,
-        ...(provider.providerName ? { name: provider.providerName } : {}),
-        ...(provider.error ? { error: provider.error } : {}),
+      providers: {
+        configured: providers.configured,
+        statuses: providers.providerStatuses,
       },
     });
   } catch (error) {
