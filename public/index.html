@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Privacy-conscious phone-number intelligence and public-source lookup tool.">
+  <meta name="description" content="Privacy-conscious phone-number intelligence and public/licensed-source aggregation tool.">
   <title>OSINTLookup</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
@@ -12,7 +12,7 @@
     <header class="hero">
       <div class="eyebrow">PUBLIC + LICENSED SOURCES</div>
       <h1>OSINTLookup</h1>
-      <p class="lede">Inspect phone-number metadata and combine it with explicitly configured, licensed enrichment sources. Searches are processed in memory and are not saved by this app.</p>
+      <p class="lede">Aggregate phone metadata with configured public/licensed sources, preserve provenance, and resolve duplicate records into an evidence-backed identity graph. Searches are processed in memory and are not saved by this app.</p>
     </header>
 
     <section class="panel search-panel" aria-labelledby="lookup-title">
@@ -21,7 +21,7 @@
           <h2 id="lookup-title">Phone lookup</h2>
           <p>Use international format when possible, for example <code>+1 213 373 4253</code>.</p>
         </div>
-        <span id="provider-status" class="status-pill">Checking provider…</span>
+        <span id="provider-status" class="status-pill">Checking providers…</span>
       </div>
 
       <form id="lookup-form">
@@ -34,6 +34,15 @@
             <span>Default country</span>
             <input id="country" name="country" type="text" value="NL" maxlength="2" pattern="[A-Za-z]{2}" aria-describedby="country-help">
             <small id="country-help">Two-letter ISO code; only used when the number has no + country code.</small>
+          </label>
+          <label>
+            <span>Lookup scope</span>
+            <select id="scope" name="scope" required>
+              <option value="self">My own number</option>
+              <option value="consented">Person has consented</option>
+              <option value="business">Business/public contact number</option>
+            </select>
+            <small>Arbitrary private-person profiling is not enabled.</small>
           </label>
         </div>
 
@@ -69,11 +78,36 @@
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <h2>Findings</h2>
-            <p>Every result includes its source and an explicit confidence score.</p>
+            <h2>Resolved entities</h2>
+            <p>Duplicate evidence is merged conservatively. Each entity retains its contributing observations and sources.</p>
+          </div>
+        </div>
+        <div id="entities" class="finding-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Evidence relationships</h2>
+            <p>Associations appear only when a provider explicitly supplies evidence linking two observations.</p>
+          </div>
+        </div>
+        <div id="relationships" class="finding-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Metadata and legacy findings</h2>
+            <p>Phone metadata and providers using the original flat findings contract appear here.</p>
           </div>
         </div>
         <div id="findings" class="finding-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Provider status</h2>
+        <div id="provider-details" class="finding-list"></div>
       </section>
 
       <section class="panel">
@@ -84,7 +118,7 @@
 
       <section class="panel notice">
         <h2>What this does not mean</h2>
-        <p>A valid numbering pattern does not prove the number is active, assigned, or owned by a particular person. Provider data may also be incomplete or stale; verify important claims against the cited source.</p>
+        <p>A valid numbering pattern does not prove the number is active, assigned, or owned by a particular person. Provider data may be incomplete or stale, and a relationship score is evidence strength rather than proof of identity. Verify important claims against the cited source.</p>
       </section>
     </section>
   </main>
