@@ -12,6 +12,9 @@ It does **not** access private accounts, messages, device contents, passwords, o
 - country / calling-code detection
 - possible / valid numbering-pattern checks
 - line-type detection when metadata supports it
+- expanded no-API public-web research plan using multiple exact phone formats
+- targeted searches for indexed PDFs, office/data files, public profiles, business/contact pages, and public messaging/contact mentions
+- automatic follow-up search pivots from high-confidence resolved names, emails, organizations, domains, and public profile URLs
 - native Twilio Lookup v2 integration for phone intelligence
 - native People Data Labs Person Identify integration for self/consented identity enrichment
 - parallel querying of multiple configured custom licensed providers
@@ -22,7 +25,6 @@ It does **not** access private accounts, messages, device contents, passwords, o
 - confidence combination when independent observations resolve to the same identifier
 - provider health/status reporting
 - backward compatibility with the original flat `findings` provider format
-- Google/Bing exact-match research links that are only opened by the user
 - in-memory request processing with `Cache-Control: no-store`
 - API rate limiting and security headers
 - browser UI
@@ -34,6 +36,7 @@ It does **not** access private accounts, messages, device contents, passwords, o
 phone number
     |
     +--> local phone metadata
+    +--> local research-plan generator ---> Google/Bing links (only on user click)
     +--> Twilio Lookup v2 --------+
     +--> People Data Labs --------+
     +--> licensed provider A -----+--> observations + relationship evidence
@@ -49,15 +52,32 @@ phone number
                       entities                  relationships               provenance
                    name / email /              associated-with /           source URLs /
                    address / profile           belongs-to / etc.           confidence
+                         |
+                         +--> high-confidence public-web pivots
 ```
 
 The resolver deliberately does not fuzzy-merge two people merely because their names are similar. A false merge can create a convincing but incorrect profile, so ambiguous records remain separate unless the evidence supplies a stronger shared identifier or relationship.
+
+## Stronger public-web mode (no API required)
+
+Even with no enrichment account configured, OSINTLookup now builds a local research plan from several exact formatting variants of the same phone number. It generates separate Google and Bing queries for:
+
+- broad exact phone-number mentions
+- indexed PDF documents
+- indexed CSV/XLS/XLSX/DOC/DOCX files
+- common public-profile platforms
+- business and contact pages, with country context when available
+- public pages mentioning the number alongside WhatsApp, Telegram, or Signal
+
+The application itself does **not** send those searches automatically. A search engine receives the query only when the user opens one of the generated links.
+
+If the entity resolver already has a high-confidence person, email, organization, domain, or public profile, the research plan also creates follow-up pivots. For example, a resolved person can be searched together with the exact phone number, and a resolved domain can be searched with a `site:` restriction. Low-confidence entities are not used for pivots.
 
 ## Important limitation
 
 The application code is only one half of a ClarityCheck-like product. The other half is **data access**. Real name/email/location/profile enrichment depends on commercial data coverage and field access under your provider plan. OSINTLookup does not ship with a hidden people database.
 
-A valid phone-number pattern does **not** prove that the number is active, assigned, or owned by a particular person. Provider data may be incomplete or stale. Treat confidence as evidence strength, not proof, and verify important claims against cited sources.
+A valid phone-number pattern does **not** prove that the number is active, assigned, or owned by a particular person. Public search results and provider data may be incomplete, stale, or refer to somebody else. Treat confidence as evidence strength, not proof, and verify important claims against cited/original sources.
 
 ## Run locally
 
@@ -264,13 +284,14 @@ The response includes:
 - `graph.entities`
 - `graph.relationships`
 - provider status
-- opt-in public-web research links
+- an opt-in, categorized public-web research plan
 
 ## Privacy / deployment notes
 
 - Lookup bodies are not persisted by this application.
 - There is intentionally no request logger.
-- Reverse proxies, hosting platforms, CDNs, and configured providers may maintain their own logs; review those separately.
+- Public-web queries are generated locally and are not sent until the user opens a search link.
+- Reverse proxies, hosting platforms, CDNs, search engines, and configured providers may maintain their own logs; review those separately.
 - Configure `TRUST_PROXY` correctly before relying on IP-based rate limiting behind a reverse proxy.
 - Keep provider credentials in environment variables or a secret manager.
 - Twilio and PDL integrations require explicit enable flags so credentials alone do not activate them.
@@ -280,7 +301,7 @@ The response includes:
 ## Project structure
 
 ```text
-src/phone.ts                 phone parsing + research-link generation
+src/phone.ts                 phone parsing + public research-plan generation
 src/model.ts                 provenance graph data model
 src/provider.ts              custom multi-provider enrichment boundary
 src/resolver.ts              conservative entity resolution
