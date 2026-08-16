@@ -172,7 +172,7 @@ app.post('/api/lookup', lookupLimiter, async (req, res) => {
       phone,
       findings: [...localFindings, ...genericProviders.findings],
       graph,
-      researchLinks: buildResearchLinks(phone),
+      researchLinks: buildResearchLinks(phone, graph.entities),
       providers: {
         configured: genericProviders.configured || nativeStatuses.length > 0,
         statuses: [...genericProviders.providerStatuses, ...nativeStatuses],
