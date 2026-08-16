@@ -23,6 +23,8 @@ test('research links do not make network requests and contain encoded exact-matc
   const phone = inspectPhone('+1 213 373 4253');
   const links = buildResearchLinks(phone);
   assert.equal(links.length, 2);
-  assert.match(links[0].url, /^https:\/\/www\.google\.com\/search\?q=/);
-  assert.match(decodeURIComponent(links[0].url), /"\+12133734253"/);
+  const firstLink = links[0];
+  assert.ok(firstLink);
+  assert.match(firstLink.url, /^https:\/\/www\.google\.com\/search\?q=/);
+  assert.match(decodeURIComponent(firstLink.url), /"\+12133734253"/);
 });

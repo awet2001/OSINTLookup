@@ -31,6 +31,7 @@ export function inspectPhone(raw: string, defaultCountry?: string): PhoneIntelli
   const countryName = countryCode
     ? new Intl.DisplayNames(['en'], { type: 'region' }).of(countryCode)
     : undefined;
+  const lineType = parsed.getType();
 
   return {
     e164: parsed.number,
@@ -42,7 +43,7 @@ export function inspectPhone(raw: string, defaultCountry?: string): PhoneIntelli
     nationalNumber: parsed.nationalNumber,
     possible: parsed.isPossible(),
     valid: parsed.isValid(),
-    ...(parsed.getType() ? { type: parsed.getType() } : {}),
+    ...(lineType ? { type: lineType } : {}),
   };
 }
 
